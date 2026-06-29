@@ -1,0 +1,20 @@
+# dependencies
+node_modules/
+**/node_modules/
+
+# build output
+dist/
+**/dist/
+dist-ssr/
+
+# env / secrets — never commit
+.env
+.env.*
+!.env.example
+
+# misc
+*.local
+.DS_Store
+*.log
+.vscode/
+.idea/

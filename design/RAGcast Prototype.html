@@ -1,0 +1,1045 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>RAGcast — Prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+<style>
+:root{
+  --bg:#0A0A0A;
+  --panel:#111111;
+  --card:#1A1A1A;
+  --card-2:#161616;
+  --border:#222222;
+  --border-soft:#1d1d1d;
+  --blue:#0066FF;
+  --blue-bright:#2D82FF;
+  --green:#00C48C;
+  --amazon:#FF9900;
+  --text:#F4F6FA;
+  --muted:#8A8F98;
+  --muted-2:#6A6F78;
+  --radius:16px;
+  --radius-sm:12px;
+  --display:'Space Grotesk','Inter',system-ui,sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter',system-ui,-apple-system,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow:hidden;
+}
+#root{height:100vh;width:100vw;}
+::selection{background:rgba(0,102,255,.35);}
+
+/* scrollbars */
+*::-webkit-scrollbar{width:10px;height:10px;}
+*::-webkit-scrollbar-thumb{background:#262626;border-radius:20px;border:2px solid transparent;background-clip:content-box;}
+*::-webkit-scrollbar-thumb:hover{background:#333;background-clip:content-box;}
+*::-webkit-scrollbar-track{background:transparent;}
+
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+input,textarea{font-family:inherit;}
+input:focus,textarea:focus,button:focus{outline:none;}
+
+/* ========== App shell ========== */
+.app-root{height:100vh;width:100vw;position:relative;overflow:hidden;}
+
+/* ========== SIGN IN ========== */
+.signin-wrap{
+  height:100vh;width:100vw;display:flex;align-items:center;justify-content:center;
+  position:relative;overflow:hidden;background:var(--bg);
+}
+.signin-glow{
+  position:absolute;left:50%;top:42%;transform:translate(-50%,-50%);
+  width:900px;height:900px;border-radius:50%;
+  background:radial-gradient(circle, rgba(0,102,255,.22) 0%, rgba(0,102,255,.07) 38%, transparent 66%);
+  filter:blur(20px);pointer-events:none;
+}
+.signin-grid{
+  position:absolute;inset:0;pointer-events:none;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.018) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.018) 1px,transparent 1px);
+  background-size:48px 48px;
+  -webkit-mask-image:radial-gradient(circle at 50% 42%, black 0%, transparent 70%);
+  mask-image:radial-gradient(circle at 50% 42%, black 0%, transparent 70%);
+}
+.signin-card{
+  position:relative;z-index:2;width:440px;max-width:calc(100vw - 48px);
+  background:linear-gradient(180deg,#131313 0%,#0E0E0E 100%);
+  border:1px solid var(--border);border-radius:24px;
+  padding:48px 44px 36px;
+  box-shadow:0 0 0 1px rgba(0,102,255,.08),0 30px 80px -20px rgba(0,0,0,.8),0 0 70px -10px rgba(0,102,255,.18);
+  opacity:1;
+  animation:rise .6s cubic-bezier(.2,.8,.2,1);
+}
+@keyframes rise{from{transform:translateY(18px) scale(.98);}to{transform:none;}}
+
+.logo{display:inline-flex;align-items:center;gap:10px;font-weight:700;letter-spacing:-.02em;font-family:var(--display);}
+.brand-mark{
+  display:inline-flex;align-items:center;justify-content:center;flex:none;color:#fff;
+  background:linear-gradient(140deg,#2D82FF 0%,#0066FF 52%,#003ea0 100%);
+  box-shadow:0 5px 16px -4px rgba(0,102,255,.7),inset 0 0 0 1px rgba(255,255,255,.14);
+}
+.brand-mark svg{width:62%;height:62%;}
+.wordmark{line-height:1;}
+
+.signin-card .logo{font-size:30px;justify-content:center;display:flex;width:100%;}
+.signin-tag{margin:14px 0 0;text-align:center;color:var(--muted);font-size:15px;line-height:1.5;font-weight:450;}
+.gbtn{
+  margin-top:32px;width:100%;display:flex;align-items:center;justify-content:center;gap:12px;
+  background:#0F0F0F;border:1px solid var(--blue);border-radius:14px;
+  padding:15px 20px;font-size:15.5px;font-weight:600;color:#fff;
+  transition:.18s ease;box-shadow:0 0 0 0 rgba(0,102,255,0);
+}
+.gbtn:hover{background:#121823;box-shadow:0 0 26px -4px rgba(0,102,255,.55);transform:translateY(-1px);border-color:var(--blue-bright);}
+.gbtn:active{transform:translateY(0);}
+.fineprint{margin:22px 0 0;text-align:center;color:var(--muted-2);font-size:12px;line-height:1.6;}
+.fineprint a{color:var(--muted);text-decoration:none;border-bottom:1px solid #333;}
+.signin-foot{position:absolute;bottom:26px;left:0;right:0;text-align:center;color:var(--muted-2);font-size:12px;z-index:2;}
+
+/* ========== MAIN APP LAYOUT ========== */
+.main{display:flex;height:100vh;width:100vw;}
+
+/* Sidebar */
+.sidebar{
+  width:280px;min-width:280px;background:var(--panel);height:100vh;
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+}
+.sb-top{padding:22px 20px 14px;}
+.sb-logo{font-size:21px;}
+.new-ep{
+  margin:4px 12px 2px;display:flex;align-items:center;gap:11px;
+  color:var(--text);font-weight:600;font-size:13.5px;
+  padding:10px 13px;border-radius:11px;transition:background .15s ease;
+}
+.new-ep:hover{background:#171717;}
+.new-ep:active{background:#1c1c1c;}
+.new-ep .ne-ico{color:var(--muted);display:inline-flex;}
+.new-ep:hover .ne-ico{color:var(--text);}
+.new-ep .kbd{
+  margin-left:auto;font-family:ui-monospace,Menlo,monospace;font-size:11.5px;color:var(--muted-2);
+  border:1px solid var(--border);border-radius:6px;padding:1px 7px;line-height:1.5;background:#141414;
+}
+.new-ep.on{background:#161b22;color:var(--blue-bright);box-shadow:inset 0 0 0 1px rgba(0,102,255,.18);}
+.new-ep.on .ne-ico{color:var(--blue-bright);}
+
+.sb-label{padding:20px 22px 9px;color:var(--muted-2);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;}
+.ep-list{flex:1;overflow-y:auto;padding:0 12px 16px;display:flex;flex-direction:column;gap:3px;}
+.ep-item{
+  position:relative;padding:11px 13px 11px 15px;border-radius:11px;cursor:pointer;
+  border-left:2px solid transparent;transition:background .15s ease;
+}
+.ep-item:hover{background:#171717;}
+.ep-item.active{background:#161b22;border-left:2px solid var(--blue);}
+.ep-item.active::after{content:"";position:absolute;inset:0;border-radius:11px;box-shadow:inset 0 0 0 1px rgba(0,102,255,.12);pointer-events:none;}
+.ep-name{font-size:13.5px;font-weight:600;color:var(--text);line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:18px;}
+.ep-item.active .ep-name{color:#fff;}
+.ep-date{font-size:11.5px;color:var(--muted-2);margin-top:3px;}
+.ep-edit{
+  position:absolute;right:9px;top:11px;width:24px;height:24px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;color:var(--muted);
+  opacity:0;transition:.15s;
+}
+.ep-item:hover .ep-edit{opacity:1;}
+.ep-edit:hover{background:#222;color:#fff;}
+
+.sb-foot-wrap{position:relative;}
+.sb-foot{width:100%;text-align:left;padding:14px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:11px;transition:background .14s ease;}
+.sb-foot:hover{background:#161616;}
+.avatar{width:34px;height:34px;border-radius:50%;background:#222;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:var(--text);flex:none;}
+.acct-id{flex:1;min-width:0;}
+.sb-foot .nm{font-size:13px;font-weight:600;}
+.sb-foot .em{font-size:11.5px;color:var(--muted-2);}
+.acct-chev{color:var(--muted-2);display:inline-flex;transition:transform .18s ease;}
+.acct-chev.open{transform:rotate(180deg);}
+.acct-backdrop{position:fixed;inset:0;z-index:20;}
+.acct-menu{
+  position:absolute;bottom:calc(100% + 8px);left:12px;right:12px;z-index:30;
+  background:#161616;border:1px solid var(--border);border-radius:13px;padding:6px;
+  box-shadow:0 18px 44px -12px rgba(0,0,0,.85);animation:rise .14s ease both;
+}
+.acct-item{
+  display:flex;align-items:center;gap:11px;width:100%;text-align:left;
+  padding:11px 12px;border-radius:9px;font-size:13.5px;font-weight:600;color:var(--text);transition:background .12s ease;
+}
+.acct-item:hover{background:#1f1f1f;}
+.acct-item.danger{color:#FF6B6B;}
+.acct-item.danger:hover{background:rgba(255,90,90,.12);}
+
+/* Chat area */
+.chat{flex:1;display:flex;flex-direction:column;height:100vh;background:var(--bg);position:relative;overflow:hidden;}
+.chat-glow{position:absolute;top:-160px;right:-120px;width:560px;height:560px;border-radius:50%;background:radial-gradient(circle,rgba(0,102,255,.10),transparent 65%);pointer-events:none;}
+.chat-head{
+  display:flex;align-items:center;gap:10px;padding:20px 32px;position:relative;z-index:2;
+}
+.chat-title{font-size:19px;font-weight:700;letter-spacing:-.01em;font-family:var(--display);}
+.chat-head .ep-edit{position:static;opacity:.7;}
+.chat-head .ep-edit:hover{opacity:1;}
+.divider{height:1px;background:var(--border);margin:0 0 0 0;position:relative;z-index:2;}
+
+.scroll{flex:1;overflow-y:auto;position:relative;z-index:2;}
+.thread{max-width:840px;margin:0 auto;padding:28px 32px 24px;display:flex;flex-direction:column;gap:22px;}
+
+/* messages */
+.msg{display:flex;flex-direction:column;max-width:78%;}
+.msg.user{align-self:flex-end;align-items:flex-end;}
+.msg.bot{align-self:flex-start;align-items:flex-start;max-width:100%;}
+.bubble-user{
+  background:#1E1E1E;color:#F0F2F5;border:1px solid var(--border);border-radius:18px 18px 6px 18px;
+  padding:13px 17px;font-size:14.5px;line-height:1.5;font-weight:450;
+  box-shadow:0 8px 24px -14px rgba(0,0,0,.7);
+}
+.bubble-bot{
+  background:none;border:none;border-radius:0;
+  padding:2px 2px 0;font-size:15px;line-height:1.65;color:#E3E6EB;
+}
+.bubble-bot p{margin:0 0 10px;}
+.bubble-bot p:last-child{margin:0;}
+.ts-link{color:var(--blue-bright);font-weight:600;text-decoration:none;}
+
+.badge-row{display:flex;gap:7px;margin-bottom:9px;align-items:center;}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;
+  letter-spacing:.03em;padding:4px 9px;border-radius:7px;text-transform:uppercase;
+}
+.badge .b-dot{width:6px;height:6px;border-radius:50%;}
+.badge.transcript{background:rgba(0,196,140,.12);color:#3FE3B4;box-shadow:inset 0 0 0 1px rgba(0,196,140,.28);}
+.badge.transcript .b-dot{background:var(--green);}
+.badge.web{background:rgba(0,102,255,.13);color:#5C9BFF;box-shadow:inset 0 0 0 1px rgba(0,102,255,.3);}
+.badge.web .b-dot{background:var(--blue);}
+.badge.split{
+  background:linear-gradient(90deg,rgba(0,196,140,.14) 0%,rgba(0,196,140,.14) 50%,rgba(0,102,255,.14) 50%,rgba(0,102,255,.14) 100%);
+  color:#cfeede;box-shadow:inset 0 0 0 1px rgba(120,170,150,.3);
+}
+.badge.split .b-dot{background:linear-gradient(90deg,var(--green) 50%,var(--blue) 50%);}
+
+/* section blocks (books / people) */
+.sec{margin:2px 0 0;}
+.sec-head{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:800;margin:0 0 14px;letter-spacing:-.01em;}
+.sec-head .ic{font-size:16px;}
+.hscroll{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 12px;scroll-snap-type:x proximity;}
+.hscroll::-webkit-scrollbar{height:7px;}
+
+.book-card{
+  min-width:188px;max-width:188px;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:16px;scroll-snap-align:start;transition:.18s ease;
+  display:flex;flex-direction:column;
+}
+.book-card:hover{border-color:#2c2c2c;box-shadow:0 10px 30px -14px rgba(0,102,255,.4),0 0 0 1px rgba(0,102,255,.18);transform:translateY(-2px);}
+.book-cover{
+  width:100%;height:130px;border-radius:9px;margin-bottom:13px;position:relative;overflow:hidden;
+  background:
+    repeating-linear-gradient(135deg,#202020 0 10px,#1c1c1c 10px 20px);
+  display:flex;align-items:center;justify-content:center;
+}
+.book-cover span{font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:#4d4d4d;letter-spacing:.05em;}
+.book-title{font-size:14px;font-weight:700;line-height:1.3;margin:0 0 3px;}
+.book-author{font-size:12px;color:var(--muted);margin:0 0 8px;}
+.book-ts{font-size:11.5px;color:var(--blue-bright);font-weight:600;margin:0 0 13px;}
+.buy{
+  margin-top:auto;display:flex;align-items:center;justify-content:center;gap:7px;
+  background:rgba(255,153,0,.12);color:var(--amazon);border:1px solid rgba(255,153,0,.4);
+  border-radius:9px;padding:8px 10px;font-size:12px;font-weight:700;transition:.16s ease;
+}
+.buy:hover{background:var(--amazon);color:#1a1205;box-shadow:0 6px 18px -6px rgba(255,153,0,.6);}
+
+.person-card{
+  min-width:200px;max-width:200px;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:16px;scroll-snap-align:start;transition:.18s ease;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+}
+.person-card:hover{border-color:#2c2c2c;box-shadow:0 10px 30px -14px rgba(0,102,255,.4),0 0 0 1px rgba(0,102,255,.18);transform:translateY(-2px);}
+.person-av{
+  width:62px;height:62px;border-radius:50%;margin-bottom:12px;
+  background:repeating-linear-gradient(135deg,#242424 0 8px,#1e1e1e 8px 16px);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:inset 0 0 0 1px #2a2a2a;
+}
+.person-av span{font-family:ui-monospace,Menlo,monospace;font-size:8px;color:#4d4d4d;}
+.person-name{font-size:14px;font-weight:700;margin:0 0 4px;}
+.person-bio{font-size:11.5px;color:var(--muted);line-height:1.4;margin:0 0 9px;min-height:30px;}
+.person-ts{font-size:11.5px;color:var(--blue-bright);font-weight:600;margin:0;}
+
+/* input bar */
+.inputbar-wrap{padding:14px 32px 22px;position:relative;z-index:2;}
+.inputbar{
+  max-width:840px;margin:0 auto;display:flex;align-items:flex-end;gap:10px;
+  background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:10px 10px 10px 18px;transition:.2s ease;
+}
+.inputbar.focus{border-color:rgba(0,102,255,.6);box-shadow:0 0 0 4px rgba(0,102,255,.1),0 0 30px -6px rgba(0,102,255,.35);}
+.inputbar textarea{
+  flex:1;background:none;border:none;color:var(--text);font-size:14.5px;line-height:1.5;
+  resize:none;max-height:140px;padding:8px 0;
+}
+.inputbar textarea::placeholder{color:var(--muted-2);}
+.send{
+  width:40px;height:40px;min-width:40px;border-radius:12px;background:var(--blue);
+  display:flex;align-items:center;justify-content:center;transition:.16s ease;
+  box-shadow:0 6px 18px -6px rgba(0,102,255,.7);
+}
+.send:hover{background:#1a74ff;}
+.send:disabled{background:#222;box-shadow:none;cursor:not-allowed;color:#555;}
+
+.typing{display:inline-flex;gap:4px;padding:4px 2px;}
+.typing i{width:7px;height:7px;border-radius:50%;background:#5C9BFF;display:inline-block;animation:blink 1.2s infinite;}
+.typing i:nth-child(2){animation-delay:.2s;}
+.typing i:nth-child(3){animation-delay:.4s;}
+@keyframes blink{0%,60%,100%{opacity:.25;transform:translateY(0);}30%{opacity:1;transform:translateY(-3px);}}
+
+/* ========== CONTEXT PANEL (right) ========== */
+.context-panel{
+  width:344px;min-width:344px;background:var(--panel);height:100vh;
+  border-left:1px solid var(--border);display:flex;flex-direction:column;position:relative;
+}
+.cp-resize{
+  position:absolute;left:-4px;top:0;bottom:0;width:9px;cursor:col-resize;z-index:8;
+  display:flex;align-items:center;justify-content:center;
+}
+.cp-resize span{width:2px;height:100%;background:transparent;transition:background .15s ease;}
+.cp-resize:hover span{background:rgba(0,102,255,.55);}
+.cp-resize:active span{background:var(--blue);}
+.cp-head{padding:21px 22px 15px;border-bottom:1px solid var(--border);}
+.cp-title{font-size:13px;font-weight:700;letter-spacing:.02em;font-family:var(--display);}
+.cp-sub{font-size:11.5px;color:var(--muted-2);margin-top:3px;}
+.cp-scroll{flex:1;overflow-y:auto;padding:18px 18px 26px;}
+.cp-sec{margin:0 0 8px;}
+.cp-sec + .cp-sec{margin-top:26px;}
+.cp-sec-head{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;margin:0;letter-spacing:.01em;white-space:nowrap;font-family:var(--display);width:100%;text-align:left;color:var(--text);cursor:pointer;transition:color .14s ease;}
+.cp-sec-head:hover{color:#fff;}
+.cp-sec-head:hover .cp-chev{color:var(--muted);}
+.cp-chev{color:var(--muted-2);display:inline-flex;transition:transform .22s ease;}
+.cp-chev.closed{transform:rotate(-90deg);}
+.cp-collapse{display:grid;grid-template-rows:1fr;transition:grid-template-rows .26s cubic-bezier(.4,0,.2,1);}
+.cp-collapse.closed{grid-template-rows:0fr;}
+.cp-collapse > .cp-collapse-inner{overflow:hidden;min-height:0;}
+.cp-sec-head .ic{font-size:15px;}
+.cp-sec-head .count{margin-left:auto;font-size:11px;font-weight:700;color:var(--muted-2);background:#1b1b1b;border:1px solid var(--border);border-radius:20px;padding:2px 9px;}
+.cp-list{display:flex;flex-direction:column;gap:11px;padding-top:13px;}
+.cp-empty{
+  font-size:12.5px;color:var(--muted-2);line-height:1.5;padding:14px 14px;
+  border:1px dashed var(--border);border-radius:12px;background:#131313;
+}
+
+.book-row{
+  display:flex;gap:13px;background:var(--card);border:1px solid var(--border);
+  border-radius:13px;padding:13px;transition:.16s ease;position:relative;
+  text-decoration:none;color:inherit;cursor:pointer;
+}
+.book-row:hover{border-color:rgba(255,153,0,.45);box-shadow:0 8px 22px -14px rgba(255,153,0,.4);}
+.br-go{
+  position:absolute;top:11px;right:11px;color:var(--muted-2);
+  opacity:0;transform:translate(-2px,2px);transition:.16s ease;
+}
+.book-row:hover .br-go{opacity:1;transform:none;color:var(--amazon);}
+.mini-cover{
+  width:48px;height:66px;min-width:48px;border-radius:7px;overflow:hidden;
+  background:repeating-linear-gradient(135deg,#202020 0 9px,#1b1b1b 9px 18px);
+  display:flex;align-items:center;justify-content:center;
+}
+.mini-cover span{font-family:ui-monospace,Menlo,monospace;font-size:7px;color:#4d4d4d;}
+.br-body{flex:1;min-width:0;display:flex;flex-direction:column;}
+.br-title{font-size:13.5px;font-weight:700;line-height:1.25;margin:0 0 2px;}
+.br-author{font-size:11.5px;color:var(--muted);margin:0 0 5px;}
+.br-ts{font-size:11px;color:var(--blue-bright);font-weight:600;margin:0;}
+.buy-mini{
+  margin-top:auto;align-self:flex-start;display:inline-flex;align-items:center;gap:6px;
+  background:rgba(255,153,0,.12);color:var(--amazon);border:1px solid rgba(255,153,0,.4);
+  border-radius:8px;padding:6px 11px;font-size:11.5px;font-weight:700;transition:.16s ease;
+}
+.buy-mini:hover{background:var(--amazon);color:#1a1205;box-shadow:0 6px 16px -6px rgba(255,153,0,.6);}
+
+.person-row{
+  display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);
+  border-radius:13px;padding:12px 13px;transition:.16s ease;
+}
+.person-row:hover{border-color:#2c2c2c;box-shadow:0 8px 22px -14px rgba(0,102,255,.45);}
+.mini-av{
+  width:42px;height:42px;min-width:42px;border-radius:50%;
+  background:repeating-linear-gradient(135deg,#242424 0 7px,#1e1e1e 7px 14px);
+  display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px #2a2a2a;
+}
+.mini-av span{font-family:ui-monospace,Menlo,monospace;font-size:7px;color:#4d4d4d;}
+.pr-body{flex:1;min-width:0;}
+.pr-name{font-size:13.5px;font-weight:700;margin:0 0 2px;}
+.pr-bio{font-size:11px;color:var(--muted);line-height:1.35;margin:0 0 4px;}
+.pr-ts{font-size:11px;color:var(--blue-bright);font-weight:600;margin:0;}
+
+/* ========== NEW EPISODE ========== */
+.ne-scroll{flex:1;overflow-y:auto;position:relative;z-index:2;}
+.ne{max-width:920px;margin:0 auto;padding:46px 32px 40px;}
+.ne h1{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:0 0 8px;font-family:var(--display);}
+.ne-sub{color:var(--muted);font-size:15px;margin:0 0 34px;}
+.ne-cards{display:flex;align-items:stretch;gap:0;position:relative;}
+.ne-card{
+  flex:1;background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:26px 26px 26px;display:flex;flex-direction:column;transition:.2s ease;
+}
+.ne-card:hover{border-color:#2a2a2a;box-shadow:0 0 40px -16px rgba(0,102,255,.4);}
+.ne-card-head{display:flex;align-items:center;gap:11px;font-size:16px;font-weight:800;margin:0 0 4px;}
+.ne-card-head .ic{font-size:19px;}
+.ne-card-desc{color:var(--muted-2);font-size:12.5px;margin:0 0 18px;}
+.field-label{font-size:12px;font-weight:600;color:var(--muted);margin:0 0 8px;display:block;}
+.tin{
+  width:100%;background:#0E0E0E;border:1px solid var(--border);border-radius:12px;
+  padding:13px 15px;color:var(--text);font-size:14px;transition:.18s ease;
+}
+.tin::placeholder{color:#4f545c;}
+.tin:focus{border-color:rgba(0,102,255,.6);box-shadow:0 0 0 3px rgba(0,102,255,.12);}
+textarea.tin{resize:none;line-height:1.55;}
+.ne-btn{
+  margin-top:16px;width:100%;background:var(--blue);color:#fff;font-weight:700;font-size:14.5px;
+  padding:13px;border-radius:12px;transition:.18s ease;box-shadow:0 8px 22px -8px rgba(0,102,255,.6);
+}
+.ne-btn:hover{background:#1a74ff;transform:translateY(-1px);}
+.ne-btn.sec{background:#161616;border:1px solid var(--border);box-shadow:none;color:var(--text);}
+.ne-btn.sec:hover{border-color:var(--blue);background:#10182a;}
+.or-div{display:flex;flex-direction:column;align-items:center;justify-content:center;width:64px;align-self:stretch;color:var(--muted-2);}
+.or-div .ln{flex:1;width:1px;background:var(--border);}
+.or-div .txt{font-size:12px;font-weight:700;padding:10px 0;letter-spacing:.05em;}
+.ne-note{margin:26px 2px 0;color:var(--muted-2);font-size:13px;font-style:italic;text-align:center;}
+.spacer{height:9px;}
+
+.flash{animation:flash .9s ease;}
+@keyframes flash{0%{box-shadow:0 0 0 0 rgba(0,102,255,.5);}100%{box-shadow:0 0 0 14px rgba(0,102,255,0);}}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<template id="__bundler_thumbnail">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#0A0A0A"/>
+  <g fill="none" stroke="#2D82FF" stroke-width="4" stroke-linecap="round">
+    <circle cx="50" cy="62" r="4" fill="#2D82FF" stroke="none"/>
+    <path d="M36 52a20 20 0 0 1 28 0"/>
+    <path d="M28 42a31 31 0 0 1 44 0"/>
+  </g>
+</svg>
+</template>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" data-presets="react">
+// ===== RAGcast mock data =====
+
+// Per-episode extracted books
+const BOOKS = [
+  { id:'b1', title:'The Beginning of Infinity', author:'David Deutsch', ts:'12:34' },
+  { id:'b2', title:'Sapiens', author:'Yuval Noah Harari', ts:'24:10' },
+  { id:'b3', title:'The Selfish Gene', author:'Richard Dawkins', ts:'41:02' },
+  { id:'b4', title:'Gödel, Escher, Bach', author:'Douglas Hofstadter', ts:'58:20' },
+  { id:'b5', title:'Thinking, Fast and Slow', author:'Daniel Kahneman', ts:'1:05:44' },
+];
+const PEOPLE = [
+  { id:'p1', name:'Demis Hassabis', bio:'Co-founder & CEO of Google DeepMind', ts:'08:45' },
+  { id:'p2', name:'Geoffrey Hinton', bio:'The “Godfather of AI”', ts:'19:30' },
+  { id:'p3', name:'Ilya Sutskever', bio:'Co-founder of Safe Superintelligence', ts:'33:12' },
+  { id:'p4', name:'Richard Feynman', bio:'Theoretical physicist, Nobel laureate', ts:'47:08' },
+];
+
+const EPISODES = [
+  { id:'ep1', name:'Lex Fridman #410 — Sam Altman on AGI', date:'3 days ago',
+    books: BOOKS, people: PEOPLE },
+  { id:'ep2', name:'The Tim Ferriss Show — Naval Ravikant', date:'1 week ago',
+    books:[
+      { id:'b1', title:'The Almanack of Naval Ravikant', author:'Eric Jorgenson', ts:'05:20' },
+      { id:'b2', title:'Skin in the Game', author:'Nassim Nicholas Taleb', ts:'27:41' },
+      { id:'b3', title:'Meditations', author:'Marcus Aurelius', ts:'52:09' },
+    ],
+    people:[
+      { id:'p1', name:'Nassim Taleb', bio:'Author of “The Black Swan”', ts:'14:02' },
+      { id:'p2', name:'Kapil Gupta', bio:'Physician & author', ts:'38:55' },
+      { id:'p3', name:'Warren Buffett', bio:'Investor, CEO of Berkshire Hathaway', ts:'1:02:18' },
+    ] },
+  { id:'ep3', name:'Huberman Lab — Sleep, Light & Recovery', date:'2 weeks ago',
+    books:[
+      { id:'b1', title:'Why We Sleep', author:'Matthew Walker', ts:'09:12' },
+      { id:'b2', title:'Breath', author:'James Nestor', ts:'44:30' },
+    ],
+    people:[
+      { id:'p1', name:'Matthew Walker', bio:'Neuroscientist, sleep researcher', ts:'06:48' },
+      { id:'p2', name:'Andy Galpin', bio:'Professor of exercise physiology', ts:'31:20' },
+    ] },
+  { id:'ep4', name:'Acquired — NVIDIA: The Machine That Ate the World', date:'3 weeks ago',
+    books:[
+      { id:'b1', title:'Chip War', author:'Chris Miller', ts:'18:05' },
+      { id:'b2', title:"The Innovator's Dilemma", author:'Clayton Christensen', ts:'1:12:40' },
+    ],
+    people:[
+      { id:'p1', name:'Jensen Huang', bio:'Founder & CEO of NVIDIA', ts:'02:30' },
+      { id:'p2', name:'Morris Chang', bio:'Founder of TSMC', ts:'49:11' },
+    ] },
+  { id:'ep5', name:'My First Million — Building AI Side Hustles', date:'Apr 28',
+    books:[
+      { id:'b1', title:'$100M Offers', author:'Alex Hormozi', ts:'22:14' },
+      { id:'b2', title:'The Lean Startup', author:'Eric Ries', ts:'40:02' },
+    ],
+    people:[
+      { id:'p1', name:'Alex Hormozi', bio:'Founder of Acquisition.com', ts:'11:09' },
+      { id:'p2', name:'Sam Parr', bio:'Founder of The Hustle', ts:'33:48' },
+    ] },
+  { id:'ep6', name:'Dwarkesh Podcast — Scaling Laws Explained', date:'Apr 14',
+    books:[
+      { id:'b1', title:'Superintelligence', author:'Nick Bostrom', ts:'15:50' },
+      { id:'b2', title:'The Beginning of Infinity', author:'David Deutsch', ts:'1:01:33' },
+    ],
+    people:[
+      { id:'p1', name:'Dario Amodei', bio:'Co-founder & CEO of Anthropic', ts:'07:25' },
+      { id:'p2', name:'Jared Kaplan', bio:'Co-founder of Anthropic', ts:'28:40' },
+    ] },
+];
+
+// A fresh thread shown for episodes that haven't been chatted in yet
+const WELCOME = [
+  { id:'w0', role:'bot', source:'transcript', html:(
+      <React.Fragment>
+        <p>I've processed this episode's transcript. Ask me anything about it — and check the panel on the right for every book and person mentioned, with timestamps.</p>
+      </React.Fragment>
+    )},
+];
+const INITIAL_THREAD = [
+  { id:'m0', role:'bot', source:'transcript', html:(
+      <React.Fragment>
+        <p>I've listened to this whole episode. Ask me anything about it — and check the panel on the right for every book and person mentioned, with timestamps.</p>
+      </React.Fragment>
+    )},
+  { id:'m1', role:'user', text:"What did Sam say about AGI timelines?" },
+  { id:'m2', role:'bot', source:'transcript', html:(
+      <React.Fragment>
+        <p>Sam was deliberately cautious on hard dates. He framed AGI as a gradual curve rather than a single moment, arguing the systems will “quietly get more capable” before anyone agrees on a finish line.</p>
+        <p>He noted the most useful framing isn't <em>when</em> but <em>what changes the week after</em> — and pointed to compute and energy as the real bottlenecks.</p>
+        <p>Heard at <a class="ts-link" href="#">38:12</a> in the episode.</p>
+      </React.Fragment>
+    )},
+  { id:'m3', role:'user', text:"Is that consistent with what other researchers predict?" },
+  { id:'m4', role:'bot', source:'split', html:(
+      <React.Fragment>
+        <p>Mostly, yes. In the transcript Sam avoids a fixed date, which lines up with Demis Hassabis's public “5–10 year” framing and Hinton's recent shift toward shorter horizons.</p>
+        <p>Per recent web sources, aggregate forecaster medians have moved earlier since 2023, though variance remains very high — so Sam's hedging is the consensus-safe position.</p>
+      </React.Fragment>
+    )},
+];
+
+// canned responses for new questions
+const CANNED = [
+  { source:'transcript', html:(
+      <React.Fragment>
+        <p>Based on the transcript, that comes up around the mid-point of the conversation. The guest stresses it's less about raw scale and more about the quality of the feedback loop.</p>
+        <p>Referenced at <a class="ts-link" href="#">44:51</a>.</p>
+      </React.Fragment>
+    )},
+  { source:'web', html:(
+      <React.Fragment>
+        <p>That specific point isn't covered in this episode's transcript — here's what reliable web sources say instead. The short version: the field is split, but the practical consensus leans toward incremental deployment over a single breakthrough.</p>
+      </React.Fragment>
+    )},
+  { source:'split', html:(
+      <React.Fragment>
+        <p>The transcript touches on this directly, and I've cross-checked it against current web sources. Both agree on the direction of travel; they differ mainly on timing and confidence.</p>
+        <p>Transcript reference: <a class="ts-link" href="#">52:07</a>.</p>
+      </React.Fragment>
+    )},
+];
+
+window.RAGDATA = { EPISODES, BOOKS, PEOPLE, INITIAL_THREAD, WELCOME, CANNED };
+
+</script>
+<script type="text/babel" data-presets="react">
+// ===== Shared components =====
+const { useState, useRef, useEffect } = React;
+
+function Logo({ size=21 }) {
+  return (
+    <span className="logo" style={{ fontSize:size }}>
+      <span className="wordmark">RAGcast</span>
+    </span>
+  );
+}
+
+const GIcon = ({ s=18 }) => (
+  <svg width={s} height={s} viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+    <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+    <path fill="#FBBC05" d="M11.69 28.18c-.44-1.32-.69-2.73-.69-4.18s.25-2.86.69-4.18v-5.7H4.34A21.99 21.99 0 0 0 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/>
+    <path fill="#EA4335" d="M24 9.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 3.18 29.93 1 24 1 15.4 1 7.96 5.93 4.34 13.12l7.35 5.7C13.42 13.62 18.27 9.75 24 9.75z"/>
+  </svg>
+);
+
+const PencilIcon = ({ s=15 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+  </svg>
+);
+
+const PlusIcon = ({ s=17 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+);
+
+const SendIcon = ({ s=18 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+);
+
+const CartIcon = ({ s=13 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+);
+
+const ExtIcon = ({ s=14 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg>
+);
+
+const ChevronIcon = ({ s=16 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+);
+
+const LogoutIcon = ({ s=16 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+);
+
+function Badge({ source }) {
+  const map = {
+    transcript: { cls:'transcript', label:'From Transcript' },
+    web:        { cls:'web',        label:'From Web' },
+    split:      { cls:'split',      label:'From Transcript + Web' },
+  };
+  const b = map[source] || map.transcript;
+  return (
+    <span className={`badge ${b.cls}`}><i className="b-dot"></i>{b.label}</span>
+  );
+}
+
+function BookCard({ book }) {
+  return (
+    <div className="book-card">
+      <div className="book-cover"><span>cover art</span></div>
+      <h4 className="book-title">{book.title}</h4>
+      <p className="book-author">{book.author}</p>
+      <p className="book-ts">Mentioned at {book.ts}</p>
+      <button className="buy"><CartIcon/> Buy on Amazon</button>
+    </div>
+  );
+}
+
+function PersonCard({ person }) {
+  return (
+    <div className="person-card">
+      <div className="person-av"><span>photo</span></div>
+      <h4 className="person-name">{person.name}</h4>
+      <p className="person-bio">{person.bio}</p>
+      <p className="person-ts">Mentioned at {person.ts}</p>
+    </div>
+  );
+}
+
+function Message({ m }) {
+  if (m.role === 'user') {
+    return (
+      <div className="msg user"><div className="bubble-user">{m.text}</div></div>
+    );
+  }
+  return (
+    <div className="msg bot">
+      <div className="bubble-bot">
+        <div className="badge-row"><Badge source={m.source}/></div>
+        {m.html}
+      </div>
+    </div>
+  );
+}
+
+function Typing() {
+  return (
+    <div className="msg bot">
+      <div className="bubble-bot" style={{paddingTop:12,paddingBottom:12}}>
+        <span className="typing"><i></i><i></i><i></i></span>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, {
+  Logo, GIcon, PencilIcon, PlusIcon, SendIcon, CartIcon, ExtIcon, ChevronIcon, LogoutIcon,
+  Badge, BookCard, PersonCard, Message, Typing,
+});
+
+</script>
+<script type="text/babel" data-presets="react">
+// ===== Screens =====
+// (EPISODES, BOOKS, PEOPLE, INITIAL_THREAD, CANNED are already global from data.jsx)
+
+/* ---------- SCREEN 1: SIGN IN ---------- */
+function SignIn({ onContinue }) {
+  return (
+    <div className="signin-wrap">
+      <div className="signin-grid"></div>
+      <div className="signin-glow"></div>
+      <div className="signin-card">
+        <Logo size={30} />
+        <p className="signin-tag">Ask anything from every podcast you've heard.</p>
+        <button className="gbtn" onClick={onContinue}>
+          <GIcon s={19} /> Continue with Google
+        </button>
+        <p className="fineprint">
+          By continuing you agree to our <a href="#">Terms</a> and <a href="#">Privacy Policy</a>.
+        </p>
+      </div>
+      <div className="signin-foot">RAGcast · retrieval-augmented listening</div>
+    </div>
+  );
+}
+
+/* ---------- SIDEBAR ---------- */
+function Sidebar({ episodes, activeId, onSelect, onNew, newOpen, onLogout }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  return (
+    <aside className="sidebar" style={{position:'relative'}}>
+      <div className="sb-top"><Logo size={21} /></div>
+      <button className={`new-ep ${newOpen ? 'on' : ''}`} onClick={onNew}>
+        <span className="ne-ico"><PlusIcon /></span> New Episode
+        <span className="kbd">⌘N</span>
+      </button>
+      <div className="sb-label">Recent Episodes</div>
+      <div className="ep-list">
+        {episodes.map(ep => (
+          <div
+            key={ep.id}
+            className={`ep-item ${ep.id === activeId && !newOpen ? 'active' : ''}`}
+            onClick={() => onSelect(ep.id)}
+          >
+            <div className="ep-name">{ep.name}</div>
+            <div className="ep-date">{ep.date}</div>
+            <button className="ep-edit" title="Rename" onClick={e => e.stopPropagation()}>
+              <PencilIcon s={13} />
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="sb-foot-wrap">
+        {menuOpen && <div className="acct-backdrop" onClick={() => setMenuOpen(false)}></div>}
+        {menuOpen && (
+          <div className="acct-menu">
+            <button className="acct-item danger" onClick={() => { setMenuOpen(false); onLogout(); }}>
+              <LogoutIcon s={16} /> Log out
+            </button>
+          </div>
+        )}
+        <button className="sb-foot" onClick={() => setMenuOpen(o => !o)}>
+          <div className="avatar">AK</div>
+          <div className="acct-id">
+            <div className="nm">Arjun Kapoor</div>
+            <div className="em">arjun@gmail.com</div>
+          </div>
+          <span className={`acct-chev ${menuOpen ? 'open' : ''}`}><ChevronIcon s={16} /></span>
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+/* ---------- BOOKS + PEOPLE — right context panel ---------- */
+function BookRow({ book }) {
+  const url = 'https://www.amazon.com/s?k=' + encodeURIComponent(book.title + ' ' + book.author);
+  return (
+    <a className="book-row" href={url} target="_blank" rel="noopener noreferrer">
+      <div className="mini-cover"><span>cover</span></div>
+      <div className="br-body">
+        <h4 className="br-title">{book.title}</h4>
+        <p className="br-author">{book.author}</p>
+        <p className="br-ts">Mentioned at {book.ts}</p>
+      </div>
+      <span className="br-go"><ExtIcon s={14}/></span>
+    </a>
+  );
+}
+
+function PersonRow({ person }) {
+  return (
+    <div className="person-row">
+      <div className="mini-av"><span>photo</span></div>
+      <div className="pr-body">
+        <h4 className="pr-name">{person.name}</h4>
+        <p className="pr-bio">{person.bio}</p>
+        <p className="pr-ts">Mentioned at {person.ts}</p>
+      </div>
+    </div>
+  );
+}
+
+function ContextPanel({ books=[], people=[], width=344, setWidth }) {
+  const [booksOpen, setBooksOpen] = useState(true);
+  const [peopleOpen, setPeopleOpen] = useState(true);
+  const startDrag = (e) => {
+    e.preventDefault();
+    const startX = e.clientX, startW = width;
+    const move = (ev) => {
+      const w = Math.min(560, Math.max(264, startW + (startX - ev.clientX)));
+      setWidth(w);
+    };
+    const up = () => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+  return (
+    <aside className="context-panel" style={{ width, minWidth:width }}>
+      <div className="cp-resize" onMouseDown={startDrag} title="Drag to resize"><span></span></div>
+      <div className="cp-head">
+        <div className="cp-title">In this episode</div>
+        <div className="cp-sub">Auto-extracted from the transcript</div>
+      </div>
+      <div className="cp-scroll">
+        <div className="cp-sec">
+          <button className="cp-sec-head" onClick={() => setBooksOpen(o => !o)}>
+            <span className={`cp-chev ${booksOpen ? '' : 'closed'}`}><ChevronIcon s={15} /></span>
+            Books Mentioned <span className="count">{books.length}</span>
+          </button>
+          <div className={`cp-collapse ${booksOpen ? '' : 'closed'}`}>
+            <div className="cp-collapse-inner">
+              <div className="cp-list">
+                {books.length
+                  ? books.map(b => <BookRow key={b.id} book={b} />)
+                  : <div className="cp-empty">No books detected in this transcript yet.</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="cp-sec">
+          <button className="cp-sec-head" onClick={() => setPeopleOpen(o => !o)}>
+            <span className={`cp-chev ${peopleOpen ? '' : 'closed'}`}><ChevronIcon s={15} /></span>
+            People Mentioned <span className="count">{people.length}</span>
+          </button>
+          <div className={`cp-collapse ${peopleOpen ? '' : 'closed'}`}>
+            <div className="cp-collapse-inner">
+              <div className="cp-list">
+                {people.length
+                  ? people.map(p => <PersonRow key={p.id} person={p} />)
+                  : <div className="cp-empty">No people detected in this transcript yet.</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/* ---------- SCREEN 2: CHAT ---------- */
+function ChatArea({ episode, thread, typing, input, setInput, onSend }) {
+  const scrollRef = useRef(null);
+  const [focus, setFocus] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [thread.length, typing]);
+
+  const handleKey = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); }
+  };
+
+  return (
+    <main className="chat">
+      <div className="chat-glow"></div>
+      <div className="chat-head" style={{position:'relative'}}>
+        <span className="chat-title">{episode.name}</span>
+        <button className="ep-edit" title="Rename episode"><PencilIcon s={15} /></button>
+      </div>
+      <div className="divider"></div>
+
+      <div className="scroll" ref={scrollRef}>
+        <div className="thread">
+          {thread.map(m => <Message key={m.id} m={m} />)}
+          {typing && <Typing />}
+        </div>
+      </div>
+
+      <div className="inputbar-wrap" style={{position:'relative'}}>
+        <div className={`inputbar ${focus ? 'focus' : ''}`}>
+          <textarea
+            rows={1}
+            placeholder="Ask anything about this episode..."
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKey}
+            onFocus={() => setFocus(true)}
+            onBlur={() => setFocus(false)}
+          />
+          <button className="send" disabled={!input.trim()} onClick={onSend}>
+            <SendIcon />
+          </button>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+/* ---------- SCREEN 3: NEW EPISODE ---------- */
+function NewEpisode({ onCreate }) {
+  const [url, setUrl] = useState('');
+  const [transcript, setTranscript] = useState('');
+  const [epName, setEpName] = useState('');
+
+  return (
+    <main className="chat">
+      <div className="chat-glow"></div>
+      <div className="ne-scroll">
+        <div className="ne">
+          <h1>Start a New Episode</h1>
+          <p className="ne-sub">Drop in a link or a transcript — RAGcast does the rest.</p>
+
+          <div className="ne-cards">
+            <div className="ne-card">
+              <div className="ne-card-head">Paste YouTube URL</div>
+              <p className="ne-card-desc">We'll fetch and clean the transcript automatically.</p>
+              <label className="field-label">Video link</label>
+              <input className="tin" placeholder="https://youtube.com/watch?v=..."
+                value={url} onChange={e => setUrl(e.target.value)} />
+              <button className="ne-btn" onClick={() => onCreate('Lex Fridman #410 — Sam Altman on AGI', 'youtube')}>
+                Fetch Transcript
+              </button>
+            </div>
+
+            <div className="or-div">
+              <div className="ln"></div><div className="txt">or</div><div className="ln"></div>
+            </div>
+
+            <div className="ne-card">
+              <div className="ne-card-head">Paste Transcript</div>
+              <p className="ne-card-desc">Already have the text? Paste it in directly.</p>
+              <label className="field-label">Transcript</label>
+              <textarea className="tin" rows={4} placeholder="Paste your transcript here..."
+                value={transcript} onChange={e => setTranscript(e.target.value)} />
+              <div className="spacer"></div>
+              <label className="field-label">Episode name</label>
+              <input className="tin" placeholder="e.g. The Knowledge Project — Annie Duke"
+                value={epName} onChange={e => setEpName(e.target.value)} />
+              <button className="ne-btn sec" onClick={() => onCreate(epName || 'Untitled Episode', 'manual')}>
+                Save Episode
+              </button>
+            </div>
+          </div>
+
+          <p className="ne-note">
+            RAGcast will automatically extract books, people and timestamps from your transcript.
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+Object.assign(window, { SignIn, Sidebar, ChatArea, NewEpisode, ContextPanel });
+
+</script>
+<script type="text/babel" data-presets="react">
+// ===== App orchestrator =====
+const { useState: useS } = React;
+
+function App() {
+  const [screen, setScreen] = useS('signin');          // 'signin' | 'app'
+  const [newOpen, setNewOpen] = useS(false);
+  const [episodes, setEpisodes] = useS(window.RAGDATA.EPISODES);
+  const [activeId, setActiveId] = useS(window.RAGDATA.EPISODES[0].id);
+  const [threads, setThreads] = useS({ [window.RAGDATA.EPISODES[0].id]: window.RAGDATA.INITIAL_THREAD });
+  const [input, setInput] = useS('');
+  const [typing, setTyping] = useS(false);
+  const [panelWidth, setPanelWidthRaw] = useS(() => {
+    const saved = Number(localStorage.getItem('ragcast_panel_w'));
+    return saved >= 264 && saved <= 560 ? saved : 344;
+  });
+  const setPanelWidth = (w) => { setPanelWidthRaw(w); localStorage.setItem('ragcast_panel_w', String(w)); };
+
+  const activeEpisode = episodes.find(e => e.id === activeId) || episodes[0];
+  const thread = threads[activeId] || window.RAGDATA.WELCOME;
+
+  function selectEpisode(id) {
+    setActiveId(id);
+    setNewOpen(false);
+  }
+
+  function sendMessage() {
+    const text = input.trim();
+    if (!text || typing) return;
+    const id = activeId;
+    const userMsg = { id:'u'+Date.now(), role:'user', text };
+    setThreads(prev => ({ ...prev, [id]: [...(prev[id] || window.RAGDATA.WELCOME), userMsg] }));
+    setInput('');
+    setTyping(true);
+    const pick = window.RAGDATA.CANNED[Math.floor(Math.random()*window.RAGDATA.CANNED.length)];
+    setTimeout(() => {
+      setTyping(false);
+      const botMsg = { id:'b'+Date.now(), role:'bot', source:pick.source, html:pick.html };
+      setThreads(prev => ({ ...prev, [id]: [...(prev[id] || window.RAGDATA.WELCOME), botMsg] }));
+    }, 1400);
+  }
+
+  function createEpisode(name, type) {
+    const src = window.RAGDATA.EPISODES[0];
+    const ep = {
+      id:'ep'+Date.now(), name, date:'Just now',
+      // YouTube fetch demo resolves to the Sam Altman episode; manual paste starts empty
+      books: type === 'youtube' ? src.books : [],
+      people: type === 'youtube' ? src.people : [],
+    };
+    setEpisodes(list => [ep, ...list]);
+    setActiveId(ep.id);
+    setNewOpen(false);
+  }
+
+  if (screen === 'signin') {
+    return (
+      <div className="app-root">
+        <SignIn onContinue={() => setScreen('app')} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="app-root">
+      <div className="main">
+        <Sidebar
+          episodes={episodes}
+          activeId={activeId}
+          onSelect={selectEpisode}
+          onNew={() => setNewOpen(true)}
+          newOpen={newOpen}
+          onLogout={() => { setScreen('signin'); setNewOpen(false); }}
+        />
+        {newOpen ? (
+          <NewEpisode onCreate={createEpisode} />
+        ) : (
+          <React.Fragment>
+            <ChatArea
+              episode={activeEpisode}
+              thread={thread}
+              typing={typing}
+              input={input}
+              setInput={setInput}
+              onSend={sendMessage}
+            />
+            <ContextPanel books={activeEpisode.books} people={activeEpisode.people} width={panelWidth} setWidth={setPanelWidth} />
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+
+</script>
+</body>
+</html>
