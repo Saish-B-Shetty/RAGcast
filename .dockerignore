@@ -1,0 +1,15 @@
+# Patterns apply repo-wide (gitignore-style — match at any depth)
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git
+*.log
+npm-debug.log*
+.DS_Store
+
+# Parts of the monorepo the backend image never needs
+frontend
+design
+*.docx
