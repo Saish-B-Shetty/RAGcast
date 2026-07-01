@@ -18,12 +18,36 @@ export default async function handler(req, res) {
       }
     }).then(r => r.text());
 
-    if (!html.includes('"captionTracks":')) {
+    // Extract captionTracks array using bracket-depth counting to handle nested JSON
+    const captionStart = html.indexOf('"captionTracks":');
+    if (captionStart === -1) {
       return res.status(404).json({ error: 'No captions available for this video' });
     }
+    const arrStart = html.indexOf('[', captionStart);
+    if (arrStart === -1) {
+      return res.status(404).json({ error: 'Malformed caption data' });
+    }
 
-    const captionsSection = html.split('"captionTracks":')[1];
-    const tracksJson = '[' + captionsSection.split(']')[0] + ']';
+    let depth = 0, pos = arrStart;
+    while (pos < html.length) {
+      const ch = html[pos];
+      if (ch === '"') {
+        // Skip over string to avoid treating brackets inside strings as delimiters
+        pos++;
+        while (pos < html.length) {
+          if (html[pos] === '"' && html[pos - 1] !== '\\') break;
+          pos++;
+        }
+      } else if (ch === '[') {
+        depth++;
+      } else if (ch === ']') {
+        depth--;
+        if (depth === 0) { pos++; break; }
+      }
+      pos++;
+    }
+
+    const tracksJson = html.slice(arrStart, pos);
     const tracks = JSON.parse(tracksJson);
 
     if (!tracks.length) {
