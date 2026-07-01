@@ -3,68 +3,86 @@ export default async function handler(req, res) {
   if (!videoId || !/^[\w-]{11}$/.test(videoId)) {
     return res.status(400).json({ error: 'Invalid or missing videoId' });
   }
-  const debug = req.query?.debug === '1';
   try {
     const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
-    const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-      headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9', 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' }
+
+    // Use YouTube inner API with TVHTML5_SIMPLY_EMBEDDED_PLAYER client.
+    // This client type does NOT require a poToken and works from server-side.
+    const playerRes = await fetch('https://www.youtube.com/youtubei/v1/player', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-YouTube-Client-Name': '85',
+        'X-YouTube-Client-Version': '2.0',
+        'Origin': 'https://www.youtube.com',
+        'Referer': `https://www.youtube.com/watch?v=${videoId}`,
+        'User-Agent': ua,
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+            clientVersion: '2.0',
+            hl: 'en', gl: 'US',
+          },
+          thirdParty: { embedUrl: 'https://www.youtube.com/' }
+        },
+        videoId,
+        playbackContext: { contentPlaybackContext: { signatureTimestamp: 19683 } }
+      }),
+      signal: AbortSignal.timeout(15_000),
     });
-    const html = await pageRes.text();
-    const rawCookies = pageRes.headers.getSetCookie?.() ?? [];
-    const cookieHeader = rawCookies.map(c => c.split(';')[0]).join('; ');
 
-    const captionStart = html.indexOf('"captionTracks":');
-    if (captionStart === -1) return res.status(404).json({ error: 'No captions found' });
-    const arrStart = html.indexOf('[', captionStart);
-    if (arrStart === -1) return res.status(404).json({ error: 'Malformed caption data' });
+    const playerData = await playerRes.json();
+    const tracks = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks ?? [];
 
-    let depth = 0, pos = arrStart;
-    while (pos < html.length) {
-      const ch = html[pos];
-      if (ch === '"') { pos++; while (pos < html.length) { if (html[pos] === '"' && html[pos-1] !== '\\') break; pos++; } }
-      else if (ch === '[') depth++;
-      else if (ch === ']') { depth--; if (depth === 0) { pos++; break; } }
-      pos++;
-    }
-    const tracks = JSON.parse(html.slice(arrStart, pos));
-    if (!tracks.length) return res.status(404).json({ error: 'No caption tracks found' });
-
-    const track = tracks.find(t => t.languageCode === 'en' && !t.kind) ?? tracks.find(t => t.languageCode === 'en') ?? tracks[0];
-    const hdrs = { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9', 'Referer': `https://www.youtube.com/watch?v=${videoId}` };
-    if (cookieHeader) hdrs['Cookie'] = cookieHeader;
-
-    // In debug mode: return the FULL baseUrl so client can test fetching it directly
-    if (debug) {
-      const captionUrl = track.baseUrl + '&fmt=json3';
-      const captionRes = await fetch(captionUrl, { headers: hdrs });
-      const captionBody = await captionRes.text();
-      return res.status(200).json({
-        trackCount: tracks.length, lang: track.languageCode, kind: track.kind,
-        baseUrl: track.baseUrl,
-        cookieCount: rawCookies.length,
-        captionStatus: captionRes.status, captionLen: captionBody.length,
-        captionPreview: captionBody.slice(0, 200)
+    if (!tracks.length) {
+      // Fallback: scrape the watch page
+      const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
+        headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9' }
       });
+      const html = await pageRes.text();
+      const idx = html.indexOf('"captionTracks":');
+      if (idx === -1) return res.status(404).json({ error: 'No captions found for this video' });
+      const arr = html.indexOf('[', idx);
+      let d = 0, p = arr;
+      while (p < html.length) {
+        const c = html[p];
+        if (c === '"') { p++; while (p < html.length) { if (html[p] === '"' && html[p-1] !== '\\') break; p++; } }
+        else if (c === '[') d++;
+        else if (c === ']') { d--; if (d === 0) { p++; break; } }
+        p++;
+      }
+      const fallbackTracks = JSON.parse(html.slice(arr, p));
+      if (!fallbackTracks.length) return res.status(404).json({ error: 'No caption tracks found' });
+      tracks.push(...fallbackTracks);
     }
 
-    // Normal mode: try json3 format
-    const captionUrl = track.baseUrl + '&fmt=json3';
-    const captionRes = await fetch(captionUrl, { headers: hdrs });
+    const track = tracks.find(t => t.languageCode === 'en' && !t.kind)
+      ?? tracks.find(t => t.languageCode === 'en')
+      ?? tracks[0];
+
+    // Fetch the caption content using json3 format
+    const captionRes = await fetch(track.baseUrl + '&fmt=json3', {
+      headers: { 'User-Agent': ua, 'Referer': `https://www.youtube.com/watch?v=${videoId}` },
+      signal: AbortSignal.timeout(15_000),
+    });
     const captionBody = await captionRes.text();
 
     if (!captionBody || captionBody.trim().length === 0) {
-      return res.status(500).json({ error: 'Caption URL returned empty content' });
+      return res.status(500).json({ error: 'Caption URL returned empty content', captionStatus: captionRes.status, trackLang: track.languageCode });
     }
 
     let parsed;
     try { parsed = JSON.parse(captionBody); } catch(e) {
-      return res.status(500).json({ error: 'Non-JSON: ' + captionBody.slice(0,100) });
+      return res.status(500).json({ error: 'Non-JSON caption: ' + captionBody.slice(0,100) });
     }
 
     const fmt = (ms) => {
       const s = ms / 1000;
-      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = (s % 60).toFixed(3);
-      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(6,'0')}`;
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      const sec = (s % 60).toFixed(3).padStart(6, '0');
+      return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${sec}`;
     };
     const lines = ['WEBVTT', ''];
     for (const ev of (parsed.events ?? [])) {
@@ -75,7 +93,7 @@ export default async function handler(req, res) {
       lines.push(text); lines.push('');
     }
     const vtt = lines.join('\n');
-    if (!vtt || vtt.trim() === 'WEBVTT') return res.status(500).json({ error: 'json3 parsed to 0 segments' });
+    if (vtt.trim() === 'WEBVTT') return res.status(500).json({ error: 'Parsed 0 caption segments' });
 
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=3600');
