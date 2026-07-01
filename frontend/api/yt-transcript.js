@@ -1,92 +1,88 @@
-export const config = { runtime: 'edge' };
+// Invidious-based YouTube transcript proxy
+// Invidious is an open-source YT frontend whose instances handle YouTube auth
+// and serve caption VTT directly — bypassing IP blocking entirely.
+// Multiple fallback instances for redundancy.
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data, null, 2), { status, headers: { 'Content-Type': 'application/json' } });
+const INVIDIOUS_INSTANCES = [
+  'https://invidious.io.lol',
+  'https://yewtu.be',
+  'https://inv.nadeko.net',
+  'https://invidious.privacydev.net',
+  'https://vid.puffyan.us',
+];
+
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
-export default async function handler(request) {
-  const { searchParams } = new URL(request.url);
-  const videoId = searchParams.get('videoId');
-  if (!videoId || !/^[\w-]{11}$/.test(videoId)) return json({ error: 'bad videoId' }, 400);
+// Try each Invidious instance until one responds with captions
+async function getViaInvidious(videoId, debug) {
+  const errors = [];
+  for (const base of INVIDIOUS_INSTANCES) {
+    try {
+      // 1. Get caption track list
+      const listRes = await fetchWithTimeout(`${base}/api/v1/captions/${videoId}`);
+      if (!listRes.ok) { errors.push(`${base}: HTTP ${listRes.status}`); continue; }
+      const listData = await listRes.json();
+      const captions = listData?.captions ?? [];
+      if (!captions.length) { errors.push(`${base}: no captions`); continue; }
 
-  const ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36';
+      // Pick English caption (prefer non-auto-generated)
+      const cap =
+        captions.find(c => c.languageCode === 'en' && !c.label.toLowerCase().includes('auto')) ??
+        captions.find(c => c.languageCode === 'en') ??
+        captions[0];
 
-  const pageRes = await fetch(`https://www.youtube.com/watch?v=${videoId}`, {
-    headers: { 'User-Agent': ua, 'Accept-Language': 'en-US,en;q=0.9', 'Accept': 'text/html,*/*;q=0.8' },
-  });
-  const html = await pageRes.text();
-  const rawCookies = pageRes.headers.getSetCookie?.() ?? [];
-  const cookieHeader = rawCookies.map(c => c.split(';')[0]).join('; ');
-  const visitorData = html.match(/"visitorData":"([^"]+)"/)?.[1];
-  const params = html.match(/"getTranscriptEndpoint":\{"params":"([^"]+)"\}/)?.[1];
+      // 2. Fetch the VTT content via the Invidious proxy
+      const vttUrl = `${base}${cap.url}&fmt=vtt`;
+      const vttRes = await fetchWithTimeout(vttUrl);
+      if (!vttRes.ok) { errors.push(`${base}: vtt HTTP ${vttRes.status}`); continue; }
+      const vtt = await vttRes.text();
+      if (!vtt || vtt.trim().length < 20) { errors.push(`${base}: empty vtt`); continue; }
 
-  // Extract first captionTrack baseUrl
-  const captionStart = html.indexOf('"captionTracks":');
-  let baseUrl = null;
-  if (captionStart !== -1) {
-    const m = html.slice(captionStart, captionStart + 3000).match(/"baseUrl":"([^"]+)"/);
-    if (m) baseUrl = m[1].replace(/\\u0026/g, '&');
+      return { vtt, instance: base, label: cap.label, debug_errors: errors };
+    } catch (e) {
+      errors.push(`${base}: ${e.message ?? e}`);
+    }
   }
+  return { vtt: null, errors };
+}
+export default async function handler(req, res) {
+  const videoId = req.query?.videoId;
+  if (!videoId || !/^[\w-]{11}$/.test(videoId)) {
+    return res.status(400).json({ error: 'bad videoId' });
+  }
+  const debug = req.query?.debug === '1';
 
-  const sessionHdrs = {
-    'User-Agent': ua, 'Origin': 'https://www.youtube.com',
-    'Referer': `https://www.youtube.com/watch?v=${videoId}`,
-    ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-    ...(visitorData ? { 'X-Goog-Visitor-Id': visitorData } : {}),
-  };
-  const results = {};
-
-  // Test A: Old-style timedtext (no sig required)
   try {
-    const rA = await fetch(`https://www.youtube.com/api/timedtext?v=${videoId}&lang=en&fmt=vtt`, { headers: sessionHdrs });
-    const bA = await rA.text();
-    results.A_oldTimedtext = { status: rA.status, len: bA.length, preview: bA.slice(0, 100) };
-  } catch(e) { results.A_oldTimedtext = { error: String(e) }; }
+    const result = await getViaInvidious(videoId, debug);
 
-  // Test B: baseUrl with json3 format (instead of vtt)
-  if (baseUrl) {
-    try {
-      const rB = await fetch(baseUrl + '&fmt=json3', { headers: sessionHdrs });
-      const bB = await rB.text();
-      results.B_json3 = { status: rB.status, len: bB.length, preview: bB.slice(0, 150) };
-    } catch(e) { results.B_json3 = { error: String(e) }; }
-  }
+    if (!result.vtt) {
+      return res.status(500).json({ error: 'All Invidious instances failed', details: result.errors });
+    }
 
-  // Test C: TVHTML5_SIMPLY_EMBEDDED_PLAYER client (type 85)
-  if (params) {
-    try {
-      const rC = await fetch('https://www.youtube.com/youtubei/v1/get_transcript?prettyPrint=false', {
-        method: 'POST',
-        headers: { ...sessionHdrs, 'Content-Type': 'application/json',
-          'X-YouTube-Client-Name': '85', 'X-YouTube-Client-Version': '2.0' },
-        body: JSON.stringify({ context: { client: { clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER', clientVersion: '2.0', hl: 'en', gl: 'US' } }, params }),
+    if (debug) {
+      return res.status(200).json({
+        success: true,
+        instance: result.instance,
+        label: result.label,
+        vttLen: result.vtt.length,
+        vttPreview: result.vtt.slice(0, 300),
+        errors: result.debug_errors,
       });
-      const bC = await rC.text();
-      results.C_tvhtml5 = { status: rC.status, len: bC.length, preview: bC.slice(0, 200) };
-    } catch(e) { results.C_tvhtml5 = { error: String(e) }; }
-  }
+    }
 
-  // Test D: get_transcript with API key in URL (public key)
-  if (params) {
-    try {
-      const rD = await fetch('https://www.youtube.com/youtubei/v1/get_transcript?key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8&prettyPrint=false', {
-        method: 'POST',
-        headers: { ...sessionHdrs, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: '2.20200525.01.00', hl: 'en', gl: 'US', visitorData } }, params }),
-      });
-      const bD = await rD.text();
-      results.D_withApiKey = { status: rD.status, len: bD.length, preview: bD.slice(0, 200) };
-    } catch(e) { results.D_withApiKey = { error: String(e) }; }
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.send(result.vtt);
+  } catch (err) {
+    console.error('[yt-transcript]', err);
+    return res.status(500).json({ error: String(err?.message ?? err) });
   }
-
-  // Test E: baseUrl raw XML (no fmt param)
-  if (baseUrl) {
-    try {
-      const rE = await fetch(baseUrl, { headers: sessionHdrs });
-      const bE = await rE.text();
-      results.E_rawXml = { status: rE.status, len: bE.length, preview: bE.slice(0, 150) };
-    } catch(e) { results.E_rawXml = { error: String(e) }; }
-  }
-
-  return json({ hasParams: !!params, hasBaseUrl: !!baseUrl, hasVisitorData: !!visitorData, results });
 }
